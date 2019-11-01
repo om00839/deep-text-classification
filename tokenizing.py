@@ -1,16 +1,97 @@
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
-
-""" Tokenization classes (It's exactly the same code as Google BERT code """
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
+""" Tokenization classes (It's exactly the same code as Google BERT code) """
+"""
+tokenizing.py
+okt, khaiii, word piece model tokenizer들의 인풋과 아웃풋을 동일한 형식으로 만든 클래스들을 정의한 모듈
+"""
+
+
+from utils import Instance, to_instances, Pipeline
+
+from functools import partial
+
+import khaiii
+from konlpy.tag import Okt
+from tqdm import tqdm_notebook as tqdm
 
 import collections
 import unicodedata
 import six
 
+# Tokenizing 인터페이스
+class BaseTokenizing(Pipeline):
+    def __init__(self, tokenize):
+        super().__init__()
+        self.tokenize = tokenize
 
+        
+# 카카오 khaiii tokenizer 사용
+class KhaiiiTokenizing(BaseTokenizing):
+    def __init__(self):
+        self.tokenizer = khaiii.KhaiiiApi()
+        super().__init__(self.tokenizer.analyze)
+        
+    def __call__(self, instances):
+        
+        instances_tokenized = list()
+        
+        for id_, text, label in tqdm(instances): # tqdm 추가 6.21
+            temp = list()
+            for khaiiiword in self.tokenize(text):
+                for morph in khaiiiword.morphs:
+                    temp += [morph.lex]
+            text_tokenized = ' '.join(temp)
+            instances_tokenized.append(Instance(id_, text_tokenized, label))
+            
+        return instances_tokenized
+    
+    
+# konlpy Open Korean Text Tokenizer 사용
+class OktTokenizing(BaseTokenizing):
+    def __init__(self, norm=False, stem=False):
+        self.tokenizer = Okt()
+        super().__init__(partial(self.tokenizer.pos, norm=norm, stem=stem, join=False))
+        
+    def __call__(self,instances):
+        
+        instances_tokenized = list()
+        
+        for id_, text, label in tqdm(instances): # tqdm 추가 6.21
+            text_tokenized = ' '.join(list(map(lambda x: x[0], self.tokenize(text))))
+            instances_tokenized.append(Instance(id_, text_tokenized, label))
+            
+        return instances_tokenized
+    
+
+# Word Piece Model Tokenizer 사용
+# BERT Embedding시 반드시 이 tokenizing class 사용해야 함.
+class WpmTokenizing(BaseTokenizing):
+    def __init__(self, vocab_file):
+        self.tokenizer = FullTokenizer(vocab_file, do_lower_case=False)
+        super().__init__(self.tokenizer.tokenize)
+        
+    def __call__(self, instances, sent_split=True):
+        
+        instances_tokenized = []
+        
+        for id_, text, label in instances:
+            
+            text_tokenized = None
+            
+            if sent_split:
+                text_tokenized = '\n'.join(map(lambda x: ' '.join(self.tokenize(x)), text.split('\n')))
+            else:
+                text_tokenized = ' '.join(self.tokenize(text))
+                
+            instances_tokenized.append(Instance(id_, text_tokenized, label))
+        
+        return instances_tokenized
+    
+
+# 아래는 Word Piece Model 관련 함수, 클래스들    
 def convert_to_unicode(text):
     """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
     if six.PY3:
@@ -179,8 +260,8 @@ class BasicTokenizer(object):
             else:
                 output.append(char)
         return "".join(output)
-
-
+    
+    
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
@@ -241,8 +322,8 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
-
-
+    
+    
 def _is_whitespace(char):
     """Checks whether `chars` is a whitespace character."""
     # \t, \n, and \r are technically contorl characters but we treat them

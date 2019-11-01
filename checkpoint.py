@@ -1,7 +1,7 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
 
 """ Load a checkpoint file of pretrained transformer to a model in pytorch """
-
+"""Tensorflow로 학습된 pre-trained model의 weight를 pytorch 모델의 weigth로 변환하기 위해 사용된 모듈  """
 import numpy as np
 import tensorflow as tf
 import torch
